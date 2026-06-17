@@ -1,0 +1,20 @@
+{
+	admin off
+	auto_https off
+}
+
+# Gradio UI (auth) -> internal mineru gradio (alias gradio-up, set in both compose files)
+:7860 {
+	basic_auth {
+		admin $2a$14$/9Y0ZilvAOhZgtAyFVFt2OowTWT0C049Z1BP/mJIKUqCJnUFshIDO
+	}
+	reverse_proxy gradio-up:7860
+}
+
+# Web API (auth) -> internal mineru api (alias api-up)
+:8000 {
+	basic_auth {
+		admin $2a$14$/9Y0ZilvAOhZgtAyFVFt2OowTWT0C049Z1BP/mJIKUqCJnUFshIDO
+	}
+	reverse_proxy api-up:8000
+}

@@ -1,0 +1,24 @@
+﻿{
+  "//": "Merge these entries into Cline's MCP settings (memory + web search), located at:",
+  "//windows-cline": "%APPDATA%\\Code\\User\\globalStorage\\saoudrizwan.claude-dev\\settings\\cline_mcp_settings.json",
+  "//windows-roo": "%APPDATA%\\Code\\User\\globalStorage\\rooveterinaryinc.roo-cline\\settings\\mcp_settings.json",
+  "mcpServers": {
+    "memori": {
+      "command": "C:\\Users\\<you>\\Documents\\local-ai-stack\\memori\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\<you>\\Documents\\local-ai-stack\\memori\\mcp_server.py"],
+      "env": {
+        "//MEMORI_PROJECT": "per-project namespace; change this per workspace, e.g. the repo name",
+        "MEMORI_PROJECT": "default"
+      },
+      "disabled": false,
+      "autoApprove": ["recall_memory"]
+    },
+    "searxng": {
+      "//": "Web search via the local SearXNG (needs the searxng container up + localhost:8081 published).",
+      "command": "C:\\Users\\<you>\\Documents\\local-ai-stack\\memori\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\<you>\\Documents\\local-ai-stack\\mcp\\searxng_search.py"],
+      "disabled": false,
+      "autoApprove": ["web_search"]
+    }
+  }
+}

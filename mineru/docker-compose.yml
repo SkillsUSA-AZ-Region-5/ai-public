@@ -1,0 +1,52 @@
+# MinerU (pipeline, CPU) behind a Caddy basic-auth proxy.
+# Caddy (mineru-auth) publishes the auth'd ports; the raw mineru services are internal-only.
+#   Web API:  http://localhost:8000/docs   (login: admin / <password>)
+#   Gradio:   http://localhost:7860        (login: admin / <password>)
+# Pipeline backend runs on CPU so it coexists with LM Studio's GPU usage.
+services:
+  mineru-api:
+    image: mineru:latest
+    container_name: mineru-api
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_DEVICE_MODE: cpu
+    entrypoint: mineru-api
+    command: --host 0.0.0.0 --port 8000
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    networks:
+      default:
+        aliases: [api-up]
+
+  mineru-gradio:
+    image: mineru:latest
+    container_name: mineru-gradio
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_DEVICE_MODE: cpu
+    entrypoint: mineru-gradio
+    command: --server-name 0.0.0.0 --server-port 7860
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    networks:
+      default:
+        aliases: [gradio-up]
+
+  mineru-auth:
+    image: caddy:2
+    container_name: mineru-auth
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+      - "8000:8000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - mineru-gradio
+      - mineru-api

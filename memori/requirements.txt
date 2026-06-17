@@ -1,0 +1,16 @@
+# Memory stack = Mem0 (current). Brain + nomic embeddings via the LiteLLM gateway,
+# vectors in Qdrant. Recall is fast vector search.
+mem0ai
+qdrant-client
+fastapi
+uvicorn
+requests
+python-dotenv
+# MCP server runtime (Cline) - now a thin HTTP client to the Mem0 service.
+mcp[cli]
+# Optional: better keyword/hybrid search in Mem0 (spaCy + BM25). Not required.
+#   pip install "mem0ai[nlp]" fastembed
+
+# --- legacy (Memori engine, retired; old memory_service.py/memori_config.py still import it) ---
+memorisdk==2.3.3
+sqlalchemy

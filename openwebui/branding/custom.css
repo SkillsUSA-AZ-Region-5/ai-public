@@ -1,0 +1,43 @@
+/* SkillsUSA "dark but vividly orange" theme for OpenWebUI.
+   OpenWebUI's dark mode pulls surfaces from var(--color-gray-*) and accents from
+   var(--color-blue/sky/indigo-*). We remap BOTH: grays -> dark AMBER (more orange chroma,
+   not just brown) so surfaces read orange while staying dark; accents -> bright orange.
+   !important because app CSS may load after this file. */
+:root {
+  /* --- accents: bright, saturated orange --- */
+  --color-blue-50:  #fff4e3 !important;  --color-blue-100: #ffe6c4 !important;
+  --color-blue-200: #ffd29b !important;  --color-blue-300: #ffb761 !important;
+  --color-blue-400: #ffa023 !important;  --color-blue-500: #ff8800 !important;
+  --color-blue-600: #f56e00 !important;  --color-blue-700: #cc5400 !important;
+  --color-blue-800: #993f06 !important;  --color-blue-900: #7c330c !important;
+  --color-blue-950: #431a05 !important;
+
+  --color-sky-50:  #fff4e3 !important;   --color-sky-100: #ffe6c4 !important;
+  --color-sky-200: #ffd29b !important;   --color-sky-300: #ffb761 !important;
+  --color-sky-400: #ffa023 !important;   --color-sky-500: #ff8800 !important;
+  --color-sky-600: #f56e00 !important;   --color-sky-700: #cc5400 !important;
+
+  --color-indigo-300: #ffb761 !important; --color-indigo-400: #ffa023 !important;
+  --color-indigo-500: #ff8800 !important; --color-indigo-600: #f56e00 !important;
+
+  /* --- neutrals: dark AMBER surfaces (more orange chroma than before) --- */
+  --color-gray-50:  #fbf2e3 !important;  /* primary text (warm white) */
+  --color-gray-100: #f2e1c6 !important;
+  --color-gray-200: #e3c79c !important;
+  --color-gray-300: #cda86f !important;  /* muted text */
+  --color-gray-400: #b08746 !important;
+  --color-gray-500: #946b2c !important;
+  --color-gray-600: #6f4d1c !important;  /* hover surfaces -> warm glow */
+  --color-gray-700: #4a3211 !important;  /* borders -> orange-brown */
+  --color-gray-800: #321f0b !important;  /* cards / elevated panels (dark amber) */
+  --color-gray-850: #271807 !important;
+  --color-gray-900: #1d1206 !important;  /* main background (dark amber) */
+  --color-gray-950: #130b03 !important;
+}
+
+/* orange scrollbars + selection for extra pop */
+* { scrollbar-color: #c8651b transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #b9560f; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #ff8800; }
+::selection { background: rgba(255, 136, 0, 0.35); }

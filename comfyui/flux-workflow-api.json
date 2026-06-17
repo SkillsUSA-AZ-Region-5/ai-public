@@ -1,0 +1,45 @@
+{
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "clip": ["30", 1], "text": "a photo of a cat" }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["31", 0], "vae": ["30", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "owui", "images": ["8", 0] }
+  },
+  "27": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": { "width": 1024, "height": 1024, "batch_size": 1 }
+  },
+  "30": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "flux1-dev-fp8.safetensors" }
+  },
+  "31": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 20,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": ["30", 0],
+      "positive": ["35", 0],
+      "negative": ["33", 0],
+      "latent_image": ["27", 0]
+    }
+  },
+  "33": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": { "conditioning": ["6", 0] }
+  },
+  "35": {
+    "class_type": "FluxGuidance",
+    "inputs": { "guidance": 3.5, "conditioning": ["6", 0] }
+  }
+}

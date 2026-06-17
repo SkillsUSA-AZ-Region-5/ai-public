@@ -1,0 +1,81 @@
+# Merge these into /root/.hermes/config.yaml to point Hermes at the local stack.
+# (network_mode: host, so 127.0.0.1 from inside the container reaches the WSL host.)
+# Full context + verification: hermes/hermes-setup.md
+
+model:
+  default: hermes                        # a litellm alias, NOT a raw model id. `hermes` -> qwen3.6-35b-a3b
+  provider: custom                       # (same target as `chat` - the model `stack profile code` loads -
+  base_url: http://127.0.0.1:4000/v1     # but a Hermes-specific alias so the usage dashboard attributes
+  api_key: <LITELLM_KEY_HERMES>          # per-app LiteLLM virtual key for tracking Hermes usage
+                                         # JIT-loading a second model (e.g. gemma at 8k ctx) that then
+                                         # fights qwen for VRAM and overflows on long prompts.
+
+web:
+  backend: searxng
+  search_backend: searxng
+  extract_backend: ''                    # SearXNG searches but does not fetch/extract pages
+
+# Sub-agents (delegate_task) run on a DEDICATED model so they don't queue behind the coding
+# qwen-35b (parallel=1). hermes-subagent -> qwen2.5-3b-instruct loaded CPU-only at --parallel 16
+# (GPU is full of qwen-35b), so up to 16 children run truly concurrently. depth 3 keeps the spawn
+# tree bounded (depth 5+ risks runaway fan-out). The api_key is LITELLM_KEY_HERMES (loopback base_url,
+# so provider: custom is trusted). `stack profile code` loads this model CPU-only at
+# --context-length 65536 --parallel 16.
+delegation:
+  model: hermes-subagent
+  provider: custom
+  base_url: http://127.0.0.1:4000/v1
+  api_key: <LITELLM_KEY_HERMES>
+  max_concurrent_children: 16            # == the sub-agent model's parallel slots; more just re-queues
+  max_spawn_depth: 3
+  orchestrator_enabled: true
+  inherit_mcp_toolsets: true             # children inherit the SearXNG search tool
+
+# Keep the skill registry focused on skills that work on this box. The disabled list is global
+# and uses skill names, not category paths. This keeps unconfigured cloud, Apple, social, email,
+# Hue, Teams, and external coding-agent integrations out of the prompt and Discord autocomplete.
+skills:
+  disabled:
+    - airtable
+    - apple-notes
+    - apple-reminders
+    - audiocraft-audio-generation
+    - baoyu-infographic
+    - blogwatcher
+    - claude-code
+    - claude-design
+    - codex
+    - design-md
+    - evaluating-llms-harness
+    - findmy
+    - gif-search
+    - github-auth
+    - github-code-review
+    - github-issues
+    - github-pr-workflow
+    - github-repo-management
+    - google-workspace
+    - heartmula
+    - hermes-agent-skill-authoring
+    - himalaya
+    - imessage
+    - kanban-orchestrator
+    - kanban-worker
+    - macos-computer-use
+    - manim-video
+    - notion
+    - obsidian
+    - opencode
+    - openhue
+    - serving-llms-vllm
+    - simplify-code
+    - songsee
+    - teams-meeting-pipeline
+    - touchdesigner-mcp
+    - weights-and-biases
+    - xurl
+    - yuanbao
+
+# And in /root/.hermes/.env :
+#   SEARXNG_URL=http://127.0.0.1:8081
+#   GATEWAY_ALLOW_ALL_USERS=true

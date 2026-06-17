@@ -1,0 +1,50 @@
+﻿# SearXNG config for the local AI stack. Merges over SearXNG defaults.
+use_default_settings: true
+server:
+  secret_key: "adcfd73b2d9bb0225be64b7f059d4f41e954945ec7b46eef3c0fe2860767c20d"
+  limiter: false          # don't rate-limit OpenWebUI's automated queries
+  image_proxy: true
+search:
+  safe_search: 0
+  formats:                # JSON is REQUIRED for OpenWebUI; off by default
+    - html
+    - json
+
+# Curated extra engines (no API key, no base_url needed). Merged by name into the
+# SearXNG defaults via use_default_settings. Re-run inspect_engines.py to review.
+engines:
+  # independent / privacy general search
+  - {name: mojeek, disabled: false}
+  - {name: marginalia, disabled: false}
+  - {name: mwmbl, disabled: false}
+  - {name: wiby, disabled: false}
+  - {name: yep, disabled: false}
+  - {name: presearch, disabled: false}
+  - {name: swisscows, disabled: false}
+  # reference / knowledge
+  - {name: wikibooks, disabled: false}
+  - {name: wikiquote, disabled: false}
+  - {name: wikisource, disabled: false}
+  - {name: wikivoyage, disabled: false}
+  - {name: wikiversity, disabled: false}
+  - {name: openlibrary, disabled: false}
+  - {name: crossref, disabled: false}
+  - {name: openalex, disabled: false}
+  # dev / packages / tech
+  - {name: hackernews, disabled: false}
+  - {name: lobste.rs, disabled: false}
+  - {name: codeberg, disabled: false}
+  - {name: crates.io, disabled: false}
+  - {name: pkg.go.dev, disabled: false}
+  - {name: pub.dev, disabled: false}
+  - {name: npm, disabled: false}
+  - {name: packagist, disabled: false}
+  - {name: rubygems, disabled: false}
+  - {name: hex, disabled: false}
+  - {name: metacpan, disabled: false}
+  - {name: repology, disabled: false}
+  - {name: huggingface, disabled: false}
+  # media / social
+  - {name: reddit, disabled: false}
+  - {name: imdb, disabled: false}
+  - {name: goodreads, disabled: false}

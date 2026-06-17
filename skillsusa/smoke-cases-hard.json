@@ -1,0 +1,10 @@
+[
+  { "query": "What do I bring to wire a residential smart home with coax, run cable through drywall, and use a stud finder?", "expect": "Internet of Things (IOT) Smart Home", "note": "no contest name; residential terms unique to IOT (coax/drywall/stud finder)" },
+  { "query": "What tools do I need to console into a Cisco router or switch over an RS232 serial connection?", "expect": "Internetworking", "note": "no contest name; Cisco/RS232 console unique to Internetworking" },
+  { "query": "What equipment terminates 8-pin modular plugs and tests fiber-optic continuity, and do I need a hard hat?", "expect": "Telecommunications Cabling", "note": "no contest name; 8-pin/fiber/hard hat unique to structured cabling" },
+  { "query": "Which contest needs Kali Linux, Wireshark, Nmap and a Wi-Fi adapter in promiscuous mode?", "expect": "Cyber Security", "note": "no contest name; Kali/Wireshark/Nmap unique to Cyber Security" },
+  { "query": "What do I bring for the Certiport IC3 office applications certification exam?", "expect": "Technical Computer Applications", "note": "no contest name; Certiport IC3 unique to TCA" },
+  { "query": "Which competition lets me reference BIOS codes and HDD parameters for help desk technician work?", "expect": "Information Technology Services", "note": "no contest name; BIOS/HDD/help desk unique to IT Services" },
+  { "query": "What materials do I need for a 3D printing build?", "expect": "Additive Manufacturing", "note": "no contest name; 3D printing -> Additive Manufacturing" },
+  { "query": "Equipment for designing and building a video game from scratch", "expect": "Interactive Application and Video Game Development", "note": "no contest name; game building -> game dev, not Computer Programming" }
+]

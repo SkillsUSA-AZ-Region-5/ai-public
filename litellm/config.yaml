@@ -1,0 +1,117 @@
+# LiteLLM gateway: one OpenAI-compatible endpoint that maps logical model names to
+# LM Studio. Runs in a container, so direct models reach LM Studio at the host LAN IP.
+# Chat/code aliases go through the LM Studio scheduler proxy, which wakes profiles on demand.
+# Apps authenticate with per-app virtual keys from LiteLLM's DB; keep
+# LITELLM_MASTER_KEY for administration. LiteLLM authenticates to LM Studio with
+# LMSTUDIO_API_KEY.
+model_list:
+  # User-facing chat model under its real name, so OpenWebUI (now routed through
+  # LiteLLM for token metering) lists it normally. The brain/chat/embed aliases below
+  # are internal (Mem0) - hide them in OpenWebUI Admin > Settings > Models if you like.
+  - model_name: google/gemma-4-26b-a4b-qat
+    litellm_params:
+      model: openai/google/gemma-4-26b-a4b-qat
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # The chat model loaded in `stack profile image`. It rides alongside Flux (partial CPU
+  # offload), so OpenWebUI users pick this to chat-then-generate. Real model id, no aliasing.
+  - model_name: google/gemma-4-12b-qat
+    litellm_params:
+      model: openai/google/gemma-4-12b-qat
+      api_base: os.environ/LMSTUDIO_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # qwen3.6-35b-a3b under its REAL name so OpenWebUI lists it (the `chat`/`qwen-code`/claude-local-*
+  # aliases below also resolve here but are hidden internal names). Loaded by `stack profile code`;
+  # select this in OpenWebUI to chat with the strong coding/reasoning model. It's a reasoning model,
+  # so it thinks first. Only loaded under `code`, so don't pick it in chat/image mode (it would JIT-load).
+  - model_name: qwen/qwen3.6-35b-a3b
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  - model_name: brain          # Mem0 brain = small dedicated extractor (qwen2.5-1.5b-instruct, 1.65GB)
+    litellm_params:                # tiny + non-reasoning so it co-resides with qwen-35b in the `code`
+      model: openai/qwen2.5-1.5b-instruct  # profile (gemma-4-e4b was 6.3GB and couldn't fit -> memory
+      api_base: os.environ/LMSTUDIO_BASE_URL  # silently failed there). Decoupled from the chat model.
+      api_key: os.environ/LMSTUDIO_API_KEY
+      # LM Studio rejects response_format:json_object (wants json_schema/text). Drop it;
+      # Mem0's prompt already asks for JSON and its parser extracts it from plain text.
+      additional_drop_params: ["response_format"]
+  - model_name: chat           # main chat/coding model
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  - model_name: embed          # vectorizer (nomic-embed-text, 768-dim)
+    litellm_params:
+      model: openai/text-embedding-nomic-embed-text-v1.5
+      api_base: os.environ/LMSTUDIO_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+    model_info:
+      mode: embedding
+  # --- Claude Code aliases ---  point ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL at these.
+  # Claude Code speaks the Anthropic /v1/messages format; LiteLLM translates it to LM Studio.
+  # Edit the targets to whatever you have loaded (qwen3.6-35b-a3b is best at tool-calling).
+  - model_name: claude-local-main
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # fast model: same qwen MoE (only ~3B active, so it's quick) - keeps Claude Code's
+  # internal "fast" calls on a model that emits valid tool args, unlike the tiny e4b.
+  - model_name: claude-local-fast
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # --- Qwen Code CLI ---  OPENAI_MODEL for the `qwen` CLI (qwen-local.cmd). Its own alias so
+  # qwen-cli usage meters separately. Qwen Code's tool format is native to the model, so it
+  # avoids the "Invalid tool parameters" issue Claude Code hits on local models. Run `stack
+  # profile code` so qwen3.6-35b-a3b is loaded.
+  - model_name: qwen-code
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # --- Per-app attribution aliases ---  same target as `chat`, but a distinct alias so the
+  # usage callback can tag traffic by app (the `model` tag carries the *resolved* model, so
+  # every qwen client would otherwise collapse into one bar). Point each app at its own alias:
+  # Hermes -> `hermes`, Cline -> `cline`. claude-local-* and qwen-code already serve this role.
+  - model_name: hermes
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # Hermes delegation/sub-agents -> a DEDICATED CPU model (qwen2.5-3b-instruct @ --parallel 16) so up
+  # to 16 children run truly concurrently. Without this they'd all queue on the coding qwen-35b
+  # (parallel=1). Separate alias = its own usage attribution. Loaded CPU-only (GPU is full of qwen-35b).
+  - model_name: hermes-subagent
+    litellm_params:
+      model: openai/qwen2.5-3b-instruct
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  - model_name: cline
+    litellm_params:
+      model: openai/qwen/qwen3.6-35b-a3b
+      api_base: os.environ/LMSTUDIO_SCHEDULER_BASE_URL
+      api_key: os.environ/LMSTUDIO_API_KEY
+  # --- Kimi-K2.7-Code: heavy model served by standalone llama.cpp on the HOST ---
+  # NOT LM Studio. CPU+RAM only (UD-Q2_K_XL, 339GB, ~3.3 tok/s on the 2x EPYC 7552).
+  # LiteLLM hits the lightweight lazy proxy through the host LAN IP + portproxy
+  # HOST_LAN_IP:8095 -> 127.0.0.1:8095. The real backend loads on 127.0.0.1:8096
+  # only after a request arrives. The first request returns a warming 503; retry
+  # after the model finishes loading. Once warm, it unloads after 90 minutes idle.
+  # Generous timeout because generation is slow.
+  - model_name: kimi/kimi-k2.7-code
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_base: os.environ/KIMI_PROXY_BASE_URL
+      api_key: "sk-noauth"
+      timeout: 1800
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true            # tolerate params LM Studio doesn't accept
+  callbacks: ["usage_callback.handler"]   # POST token usage to Influx + stackctl dashboard

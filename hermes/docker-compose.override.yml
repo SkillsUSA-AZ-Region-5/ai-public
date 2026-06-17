@@ -1,0 +1,14 @@
+# REFERENCE COPY. The live file lives at /opt/hermes-agent/docker-compose.override.yml
+# (the separate Hermes clone in WSL), NOT in this repo's stack. docker compose auto-merges
+# a docker-compose.override.yml next to docker-compose.yml, so this is upgrade-safe.
+#
+# Why it's needed: Hermes reads some settings straight from /opt/data/.env via a config-aware
+# lookup, but messaging-platform detection (Discord/Slack/...) reads the real process env.
+# In the container the file is at /opt/data/.env, not the ~/.hermes/.env path Hermes auto-loads
+# into os.environ, so DISCORD_BOT_TOKEN in the file alone won't enable the platform. Loading it
+# as a real env_file fixes that. It carries no secrets itself (just the path).
+# See hermes/hermes-setup.md "Connect to Discord".
+services:
+  gateway:
+    env_file:
+      - /root/.hermes/.env

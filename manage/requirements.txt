@@ -1,0 +1,6 @@
+# stackctl deps (installed into the same memori/.venv that runs the Mem0 service).
+typer
+rich
+psutil
+python-dotenv
+requests

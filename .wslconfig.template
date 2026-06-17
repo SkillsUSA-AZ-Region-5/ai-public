@@ -1,0 +1,10 @@
+# Copy this to  C:\Users\<you>\.wslconfig  then run `wsl --shutdown` to apply.
+#
+# NAT (the WSL default) is what we use. We TRIED mirrored networking, but it broke
+# docker-ce's bridge/port-forwarding (OpenWebUI's published :3000 was unreachable
+# from Windows, and even from inside WSL). NAT + localhostForwarding cleanly exposes
+# container ports to Windows localhost. The container->LM Studio hop uses the host's
+# LAN IP (see CONTAINER_OPENAI_BASE_URL in .env), which works in either mode.
+[wsl2]
+networkingMode=nat
+localhostForwarding=true

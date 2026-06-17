@@ -1,0 +1,6 @@
+# Adds the VLM-backend models on top of the existing pipeline image, so GPU MinerU can run
+# the high-quality vlm-vllm-engine backend (picked per-doc in the UI) as well as pipeline.
+# Layered build = only downloads the VLM models (no base re-pull, no reinstall).
+#   docker build -t mineru:vlm -f Dockerfile.vlm .
+FROM mineru:latest
+RUN /bin/bash -c "mineru-models-download -s huggingface -m vlm"

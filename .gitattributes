@@ -1,0 +1,14 @@
+# Keep line endings stable so batch/shell files don't break on checkout.
+# (We've been bitten by LF-only .cmd files making cmd.exe spew '"M" is not recognized'.)
+* text=auto
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.sh   text eol=lf
+*.vbs  text eol=crlf
+
+# Treat these as binary (no eol munging, no diff noise).
+*.pdf  binary
+*.db   binary
+*.png  binary
+*.jpg  binary

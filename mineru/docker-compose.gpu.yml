@@ -1,0 +1,64 @@
+# MinerU on GPU (pipeline/cuda) behind a Caddy basic-auth proxy. Used by `stack profile
+# extract-gpu`, which unloads the chat model first. Same auth'd ports as the CPU variant
+# (only one of CPU/GPU runs at a time). Image mineru:vlm => both pipeline + VLM backends.
+services:
+  mineru-api-gpu:
+    image: mineru:vlm
+    container_name: mineru-api-gpu
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_DEVICE_MODE: cuda
+    entrypoint: mineru-api
+    command: --host 0.0.0.0 --port 8000
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    networks:
+      default:
+        aliases: [api-up]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  mineru-gradio-gpu:
+    image: mineru:vlm
+    container_name: mineru-gradio-gpu
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: local
+      MINERU_DEVICE_MODE: cuda
+    entrypoint: mineru-gradio
+    command: --server-name 0.0.0.0 --server-port 7860
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    networks:
+      default:
+        aliases: [gradio-up]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  mineru-auth-gpu:
+    image: caddy:2
+    container_name: mineru-auth-gpu
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+      - "8000:8000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - mineru-gradio-gpu
+      - mineru-api-gpu
