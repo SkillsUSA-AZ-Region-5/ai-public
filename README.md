@@ -52,6 +52,8 @@ day-to-day commands. The rest is reference.
 | LiteLLM gateway | http://localhost:4000/v1 | per-app `LITELLM_KEY_*` from `.env`; master key for admin only |
 | Qdrant dashboard | http://localhost:6333/dashboard | none (keep off the LAN) |
 | Mem0 health check | http://localhost:8077/health | none (other routes need the Bearer token) |
+| Meshtastic Mem0 health | http://localhost:8078/health | none (other routes need `MESHTASTIC_MEM0_SERVICE_TOKEN`) |
+| Meshtastic MCP bridge | http://localhost:8079/mcp | Hermes MCP client only |
 | Hermes dashboard | http://localhost:9119 | none (127.0.0.1 only; tunnel for remote, see [hermes/hermes-setup.md](hermes/hermes-setup.md)) |
 | ComfyUI (image gen) | http://localhost:8188 | none (127.0.0.1 only; only up under `stack profile image`, see [comfyui/COMFYUI.md](comfyui/COMFYUI.md)) |
 
@@ -89,9 +91,14 @@ port 8000 when its profile is up.
        |
        +--> Qdrant :6333
 
+  Meshtastic Mem0 :8078 ---> Qdrant collection mem0_meshtastic
+       |
+       +--> Meshtastic MCP bridge :8079/mcp
+
   Hermes Agent (host-net)
        +--> LiteLLM :4000 (model aliases: hermes, hermes-subagent)
        +--> SearXNG :8081 (search)
+       +--> optional Meshtastic memory MCP :8079/mcp
 
   MinerU :7860/:8000 ---> PDF/doc extraction behind Caddy basic auth
 ```
@@ -105,6 +112,7 @@ port 8000 when its profile is up.
 | LiteLLM | docker | 4000 | Gateway that maps model names to LM Studio (the `gemma`/`qwen` user models, the `brain`/`embed` Mem0 pair, and per-app aliases). Admin UI + virtual keys at `:4000/ui` |
 | litellm-db | docker | internal | Postgres backing LiteLLM's virtual keys and spend tracking (no host port) |
 | Qdrant | docker | 6333 | Vector store for Mem0 |
+| Meshtastic memory profile | host (venv) | 8078 / 8079 | Separate Mem0 collection and narrow MCP bridge for Hermes Meshtastic work. Profile snippet lives in [hermes/profiles/meshtastic](hermes/profiles/meshtastic) |
 | SearXNG | docker | internal | Metasearch backend for OpenWebUI web search (no host port) |
 | Jupyter | docker | internal | Sandbox for OpenWebUI's code interpreter (no host port) |
 | MinerU | docker | 7860 / 8000 | Turns PDFs and complex documents into markdown (Gradio UI + REST API), behind Caddy basic auth |
@@ -153,6 +161,7 @@ stack mem0 users              # list memory user/project ids in Qdrant
 stack mem0 list cline:<repo>  # show recent project memories
 stack mem0 export cline:<repo>
 stack mem0 delete cline:<repo> --yes
+stack meshtastic start|status|logs # separate Hermes memory for Meshtastic work
 stack web start|stop|status   # browser dashboard for all of the above (host, :8090)
 stack expose                  # LAN-expose 3000/7860/8000 (UAC prompt, see NETWORKING.md)
 
@@ -239,6 +248,12 @@ alias points at it ([litellm/config.yaml](litellm/config.yaml)); the memory core
 `MEMORY_CORE` in [manage/stackctl.py](manage/stackctl.py). To swap the main model:
 `stack model load <id>` then `stack model unload <old>`, but leave `qwen2.5-1.5b-instruct`
 and nomic loaded.
+
+Meshtastic Hermes work can use a separate memory path. `stack meshtastic start`
+brings up a second Mem0 service on `:8078` using Qdrant collection
+`mem0_meshtastic`, plus an MCP bridge on `:8079/mcp` with only
+`recall_memory` and `record_memory`. The Hermes profile snippet and notes live in
+[hermes/profiles/meshtastic](hermes/profiles/meshtastic).
 
 ## Document pipeline (PDFs into OpenWebUI Knowledge)
 

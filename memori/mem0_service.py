@@ -12,9 +12,11 @@ Run it with the venv's python (see scripts/start-stack.cmd / the scheduled task)
 import os
 import sys
 
+LOG_FILE = os.environ.get("MEM0_LOG_FILE", "mem0_service.log")
+
 # pythonw.exe (scheduled task) has no stdout/stderr; redirect so deps don't crash.
 if sys.stdout is None or sys.stderr is None:
-    _logf = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "mem0_service.log"),
+    _logf = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", LOG_FILE),
                  "a", buffering=1, encoding="utf-8")
     sys.stdout = sys.stdout or _logf
     sys.stderr = sys.stderr or _logf
@@ -26,10 +28,14 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-LITELLM_URL = "http://localhost:4000/v1"
+SERVICE_NAME = os.environ.get("MEM0_SERVICE_NAME", "mem0-service")
+SERVICE_PORT = int(os.environ.get("MEM0_SERVICE_PORT", "8077"))
+SERVICE_HOST = os.environ.get("MEM0_SERVICE_HOST", "0.0.0.0")
+COLLECTION_NAME = os.environ.get("MEM0_COLLECTION_NAME", "mem0")
+LITELLM_URL = os.environ.get("MEM0_LITELLM_URL", "http://localhost:4000/v1")
 # Per-app LiteLLM virtual key (alias: mem0); falls back to the master key if it isn't set.
 MASTER = os.environ.get("LITELLM_KEY_MEM0") or os.environ["LITELLM_MASTER_KEY"]
-SERVICE_TOKEN = os.environ.get("MEMORI_SERVICE_TOKEN", "")
+SERVICE_TOKEN = os.environ.get("MEM0_SERVICE_TOKEN") or os.environ.get("MEMORI_SERVICE_TOKEN", "")
 # Mem0's OpenAI clients also read these from env in some code paths:
 os.environ.setdefault("OPENAI_API_KEY", MASTER)
 os.environ.setdefault("OPENAI_BASE_URL", LITELLM_URL)
@@ -50,14 +56,14 @@ CONFIG = {
         "model": "embed", "openai_base_url": LITELLM_URL, "api_key": MASTER}},
     "vector_store": {"provider": "qdrant", "config": {
         "host": "localhost", "port": 6333,
-        "collection_name": "mem0", "embedding_model_dims": 768}},
+        "collection_name": COLLECTION_NAME, "embedding_model_dims": 768}},
 }
 
 _mem = Memory.from_config(CONFIG)
 _lock = threading.Lock()
 _pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)  # background writes
 
-app = FastAPI(title="mem0-service")
+app = FastAPI(title=SERVICE_NAME)
 
 
 def _do_add(uid: str, text: str):
@@ -100,7 +106,7 @@ class RecordReq(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "engine": "mem0"}
+    return {"ok": True, "engine": "mem0", "service": SERVICE_NAME, "collection": COLLECTION_NAME}
 
 
 @app.post("/recall")
@@ -121,4 +127,4 @@ def record(r: RecordReq, authorization: str = Header(default=None)):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8077)
+    uvicorn.run(app, host=SERVICE_HOST, port=SERVICE_PORT)

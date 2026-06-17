@@ -1,0 +1,82 @@
+# Meshtastic Hermes profile.
+# Merge this into /root/.hermes/config.yaml when the Hermes instance should work
+# only with Meshtastic context and its own Mem0 memory collection.
+
+model:
+  default: hermes
+  provider: custom
+  base_url: http://127.0.0.1:4000/v1
+  api_key: <LITELLM_KEY_HERMES>
+
+web:
+  backend: searxng
+  search_backend: searxng
+  extract_backend: ''
+
+delegation:
+  model: hermes-subagent
+  provider: custom
+  base_url: http://127.0.0.1:4000/v1
+  api_key: <LITELLM_KEY_HERMES>
+  max_concurrent_children: 16
+  max_spawn_depth: 3
+  orchestrator_enabled: true
+  inherit_mcp_toolsets: true
+
+mcp_servers:
+  meshtastic_memory:
+    url: "http://<HOST_LAN_IP>:8079/mcp"
+    enabled: true
+    timeout: 120
+    connect_timeout: 30
+    supports_parallel_tool_calls: false
+    tools:
+      include: [recall_memory, record_memory]
+      resources: false
+      prompts: false
+
+skills:
+  disabled:
+    - airtable
+    - apple-notes
+    - apple-reminders
+    - audiocraft-audio-generation
+    - baoyu-infographic
+    - blogwatcher
+    - claude-code
+    - claude-design
+    - codex
+    - design-md
+    - evaluating-llms-harness
+    - findmy
+    - gif-search
+    - github-auth
+    - github-code-review
+    - github-issues
+    - github-pr-workflow
+    - github-repo-management
+    - google-workspace
+    - heartmula
+    - hermes-agent-skill-authoring
+    - himalaya
+    - imessage
+    - kanban-orchestrator
+    - kanban-worker
+    - macos-computer-use
+    - manim-video
+    - notion
+    - obsidian
+    - opencode
+    - openhue
+    - serving-llms-vllm
+    - simplify-code
+    - songsee
+    - teams-meeting-pipeline
+    - touchdesigner-mcp
+    - weights-and-biases
+    - xurl
+    - yuanbao
+
+# /root/.hermes/.env additions:
+#   SEARXNG_URL=http://127.0.0.1:8081
+#   GATEWAY_ALLOW_ALL_USERS=true

@@ -144,6 +144,7 @@ def health_block() -> str:
         ("litellm", "http://127.0.0.1:4000/health/liveliness", ""),
         ("openwebui", "http://127.0.0.1:3000/health", ""),
         ("mem0", "http://127.0.0.1:8077/health", ""),
+        ("meshtastic-mem0", "http://127.0.0.1:8078/health", ""),
         ("stack-web", "http://127.0.0.1:8090/api/health", ""),
         ("kimi-proxy", "http://127.0.0.1:8095/health", ""),
         ("kimi-backend", "http://127.0.0.1:8096/health", ""),
@@ -167,7 +168,15 @@ def redact_cmdline(text: str) -> str:
 def process_block() -> str:
     if not psutil:
         return "psutil unavailable"
-    needles = ("llama-server", "kimi_lazy_proxy.py", "lmstudio_scheduler_proxy.py", "mem0_service.py", "webapp.py")
+    needles = (
+        "llama-server",
+        "kimi_lazy_proxy.py",
+        "lmstudio_scheduler_proxy.py",
+        "mem0_service.py",
+        "meshtastic_mem0_service.py",
+        "meshtastic_memory_mcp.py",
+        "webapp.py",
+    )
     rows = []
     for p in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
         try:
@@ -194,6 +203,8 @@ def recent_errors_block() -> str:
         ROOT / "manage" / "lmstudio-scheduler-proxy.log",
         ROOT / "manage" / "webapp.log",
         ROOT / "memori" / "data" / "mem0_service.log",
+        ROOT / "memori" / "data" / "meshtastic_mem0_service.log",
+        ROOT / "memori" / "data" / "meshtastic_memory_mcp.log",
     ]
     keywords = ("error", "fail", "traceback", "exception", "cuda", "oom", "out of memory", "unload", "warming")
     lines = []

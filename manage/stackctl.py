@@ -56,6 +56,14 @@ MEM0_PYW = ROOT / "memori" / ".venv" / "Scripts" / "pythonw.exe"
 MEM0_SCRIPT = ROOT / "memori" / "mem0_service.py"
 MEM0_LOG = ROOT / "memori" / "data" / "mem0_service.log"
 MEM0_URL = "http://localhost:8077"
+MESHTASTIC_MEM0_SCRIPT = ROOT / "memori" / "meshtastic_mem0_service.py"
+MESHTASTIC_MEMORY_MCP_SCRIPT = ROOT / "memori" / "meshtastic_memory_mcp.py"
+MESHTASTIC_MEM0_PORT = int(os.environ.get("MESHTASTIC_MEM0_PORT", "8078"))
+MESHTASTIC_MCP_PORT = int(os.environ.get("MESHTASTIC_MCP_PORT", "8079"))
+MESHTASTIC_MEM0_URL = f"http://localhost:{MESHTASTIC_MEM0_PORT}"
+MESHTASTIC_MCP_URL = f"http://localhost:{MESHTASTIC_MCP_PORT}/mcp"
+MESHTASTIC_MEM0_LOG = ROOT / "memori" / "data" / "meshtastic_mem0_service.log"
+MESHTASTIC_MCP_LOG = ROOT / "memori" / "data" / "meshtastic_memory_mcp.log"
 QDRANT_URL = "http://localhost:6333"
 WEB_SCRIPT = ROOT / "manage" / "webapp.py"      # the dashboard runs on the same venv
 WEB_LOG = ROOT / "manage" / "webapp.log"
@@ -699,6 +707,78 @@ def mem0_stop() -> int:
     return len(procs)
 
 
+def _script_procs(script_name: str) -> list:
+    if not psutil:
+        return []
+    out = []
+    for p in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            if script_name in " ".join(p.info["cmdline"] or []):
+                out.append(p)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    return out
+
+
+def _start_windowless(script: Path, cwd: Path) -> None:
+    subprocess.Popen([str(MEM0_PYW), str(script)], cwd=str(cwd),
+                     creationflags=subprocess.DETACHED_PROCESS
+                     | subprocess.CREATE_NEW_PROCESS_GROUP,
+                     startupinfo=_hidden_subprocess_kwargs().get("startupinfo"))
+
+
+def meshtastic_mem0_health(timeout: float = 2.0) -> Optional[dict]:
+    try:
+        with urllib.request.urlopen(f"{MESHTASTIC_MEM0_URL}/health", timeout=timeout) as r:
+            return json.loads(r.read())
+    except Exception:
+        return None
+
+
+def meshtastic_mcp_health(timeout: float = 2.0) -> bool:
+    return _port_open("localhost", MESHTASTIC_MCP_PORT, timeout=timeout)
+
+
+def _listening_pid(port: int) -> Optional[int]:
+    if not psutil:
+        return None
+    try:
+        for c in psutil.net_connections(kind="inet"):
+            if c.status == psutil.CONN_LISTEN and c.laddr and c.laddr.port == port:
+                return c.pid
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        return None
+    return None
+
+
+def meshtastic_procs() -> list:
+    return _script_procs("meshtastic_mem0_service.py") + _script_procs("meshtastic_memory_mcp.py")
+
+
+def meshtastic_start(wait_secs: float = 45.0) -> bool:
+    if not meshtastic_mem0_health():
+        _start_windowless(MESHTASTIC_MEM0_SCRIPT, MESHTASTIC_MEM0_SCRIPT.parent)
+    if not meshtastic_mcp_health():
+        _start_windowless(MESHTASTIC_MEMORY_MCP_SCRIPT, MESHTASTIC_MEMORY_MCP_SCRIPT.parent)
+    deadline = time.time() + wait_secs
+    while time.time() < deadline:
+        time.sleep(0.5)
+        if meshtastic_mem0_health() and meshtastic_mcp_health():
+            return True
+    return bool(meshtastic_mem0_health() and meshtastic_mcp_health())
+
+
+def meshtastic_stop() -> int:
+    procs = meshtastic_procs()
+    for p in procs:
+        try:
+            p.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    psutil.wait_procs(procs, timeout=5)
+    return len(procs)
+
+
 # ---------------------------------------------------------------- web dashboard (host)
 # Same venv pythonw + background-process pattern as mem0; serves the stackctl UI on :8090.
 def web_health(timeout: float = 2.0) -> bool:
@@ -1131,6 +1211,8 @@ model_app = typer.Typer(help="LM Studio model ops.")
 app.add_typer(model_app, name="model")
 mem0_app = typer.Typer(help="Mem0 memory service (host process on :8077).")
 app.add_typer(mem0_app, name="mem0")
+meshtastic_app = typer.Typer(help="Meshtastic Hermes memory services.")
+app.add_typer(meshtastic_app, name="meshtastic")
 mineru_app = typer.Typer(help="MinerU extraction jobs.")
 app.add_typer(mineru_app, name="mineru")
 openwebui_app = typer.Typer(help="OpenWebUI import/admin helpers.")
@@ -1185,6 +1267,12 @@ def status():
     state = "[green]up[/]" if h else "[red]down[/]"
     extra = f"  [yellow]({n} instances - expected 1)[/]" if n > 1 else ""
     console.print(f"\n[bold orange1]Host services[/]\nmem0-memory\t:8077 {state}{extra}")
+    mh = meshtastic_mem0_health()
+    if mh or meshtastic_mcp_health() or meshtastic_procs():
+        mstate = "[green]up[/]" if mh else "[red]down[/]"
+        cstate = "[green]up[/]" if meshtastic_mcp_health() else "[red]down[/]"
+        console.print(f"mesh-mem0\t:{MESHTASTIC_MEM0_PORT} {mstate}")
+        console.print(f"mesh-mcp\t:{MESHTASTIC_MCP_PORT} {cstate}")
     sh = lm_scheduler_health()
     if sh or lm_scheduler_procs():
         sstate = "[green]up[/]" if sh else "[red]down[/]"
@@ -1328,6 +1416,65 @@ def mem0_delete(
         raise typer.Exit(1)
     deleted = mem0_delete_user(user_id)
     console.print(f"[green]delete requested for {deleted} memories.[/]")
+
+
+@meshtastic_app.command("status")
+def meshtastic_status():
+    """Health and process check for Meshtastic memory services."""
+    mh = meshtastic_mem0_health()
+    ch = meshtastic_mcp_health()
+    console.print(f"mem0 :{MESHTASTIC_MEM0_PORT}: {'[green]up[/] ' + str(mh) if mh else '[red]down[/]'}")
+    console.print(f"mcp  :{MESHTASTIC_MCP_PORT}: {'[green]up[/]' if ch else '[red]down[/]'}")
+    listener_pids = {pid for pid in (_listening_pid(MESHTASTIC_MEM0_PORT), _listening_pid(MESHTASTIC_MCP_PORT)) if pid}
+    for pid in sorted(listener_pids):
+        try:
+            p = psutil.Process(pid)
+            console.print(f"listener pid {p.pid}: {' '.join(p.cmdline())}")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    helpers = [p for p in meshtastic_procs() if p.pid not in listener_pids]
+    for p in helpers:
+        try:
+            console.print(f"helper pid {p.pid}: {' '.join(p.cmdline())}")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+
+@meshtastic_app.command("start")
+def meshtastic_start_cmd():
+    """Start the Meshtastic Mem0 service and MCP bridge."""
+    ok = meshtastic_start()
+    console.print("[bold green]meshtastic memory up.[/]" if ok
+                  else f"[red]did not come up - check {MESHTASTIC_MEM0_LOG} and {MESHTASTIC_MCP_LOG}[/]")
+    raise typer.Exit(0 if ok else 1)
+
+
+@meshtastic_app.command("stop")
+def meshtastic_stop_cmd():
+    """Stop the Meshtastic Mem0 service and MCP bridge."""
+    console.print(f"killed {meshtastic_stop()} process(es).")
+
+
+@meshtastic_app.command("restart")
+def meshtastic_restart_cmd():
+    """Restart the Meshtastic Mem0 service and MCP bridge."""
+    console.print(f"killed {meshtastic_stop()} process(es).")
+    ok = meshtastic_start()
+    console.print("[bold green]meshtastic memory up.[/]" if ok
+                  else f"[red]did not come up - check {MESHTASTIC_MEM0_LOG} and {MESHTASTIC_MCP_LOG}[/]")
+    raise typer.Exit(0 if ok else 1)
+
+
+@meshtastic_app.command("logs")
+def meshtastic_logs(lines: int = typer.Option(30, "--lines", "-n", help="tail this many lines")):
+    """Tail Meshtastic memory logs."""
+    for path in (MESHTASTIC_MEM0_LOG, MESHTASTIC_MCP_LOG):
+        console.print(f"[bold orange1]{path.name}[/]")
+        if not path.exists():
+            console.print("(no log file yet)")
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        console.print("\n".join(text[-lines:]) or "(empty)")
 
 
 @code_app.command("status")
