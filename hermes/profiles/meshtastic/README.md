@@ -14,6 +14,13 @@ stack meshtastic start
 stack meshtastic status
 ```
 
+Bulk markdown can be preloaded into the separate Meshtastic memory collection:
+
+```powershell
+stack meshtastic import-md C:\path\to\markdown --dry-run
+stack meshtastic import-md C:\path\to\markdown
+```
+
 The service reads these values from `.env`:
 
 ```dotenv

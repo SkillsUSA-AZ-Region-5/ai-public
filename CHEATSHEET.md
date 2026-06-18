@@ -105,6 +105,8 @@ stack mem0 delete cline:<repo> --yes
 
 ```powershell
 stack meshtastic start|stop|restart|status|logs
+stack meshtastic import-md <folder> --dry-run
+stack meshtastic import-md <folder>
 ```
 
 This is separate from the main Mem0 service. It uses `:8078` for the Mem0 API,

@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 # ---------------------------------------------------------------- config
@@ -482,6 +483,59 @@ def mem0_record(user_id: str, text: str) -> bool:
         headers["Authorization"] = f"Bearer {token}"
     res = _json_request(f"{MEM0_URL}/record", method="POST", body=body, headers=headers, timeout=15)
     return bool(res.get("ok"))
+
+
+def _meshtastic_headers() -> dict:
+    token = os.environ.get("MESHTASTIC_MEM0_SERVICE_TOKEN") or _load_env_file().get("MESHTASTIC_MEM0_SERVICE_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def meshtastic_record(user_id: str, text: str) -> bool:
+    body = {"user_id": user_id, "text": text}
+    res = _json_request(f"{MESHTASTIC_MEM0_URL}/record", method="POST",
+                        body=body, headers=_meshtastic_headers(), timeout=20)
+    return bool(res.get("ok"))
+
+
+def _iter_markdown_files(path: Path, recursive: bool) -> list[Path]:
+    if path.is_file():
+        return [path] if path.suffix.lower() in {".md", ".markdown"} else []
+    pattern = "**/*" if recursive else "*"
+    return sorted(p for p in path.glob(pattern)
+                  if p.is_file() and p.suffix.lower() in {".md", ".markdown"})
+
+
+def _chunk_markdown(text: str, max_chars: int) -> list[str]:
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    sections: list[str] = []
+    buf: list[str] = []
+    for line in lines:
+        if line.startswith("#") and buf:
+            sections.append("\n".join(buf).strip())
+            buf = []
+        buf.append(line)
+    if buf:
+        sections.append("\n".join(buf).strip())
+
+    chunks: list[str] = []
+    current = ""
+    for section in [s for s in sections if s.strip()]:
+        if len(section) > max_chars:
+            if current:
+                chunks.append(current.strip())
+                current = ""
+            for i in range(0, len(section), max_chars):
+                chunks.append(section[i:i + max_chars].strip())
+            continue
+        candidate = f"{current}\n\n{section}".strip() if current else section
+        if len(candidate) > max_chars and current:
+            chunks.append(current.strip())
+            current = section
+        else:
+            current = candidate
+    if current:
+        chunks.append(current.strip())
+    return chunks
 
 
 def _qdrant_filter(user_id: str) -> dict:
@@ -1475,6 +1529,69 @@ def meshtastic_logs(lines: int = typer.Option(30, "--lines", "-n", help="tail th
             continue
         text = path.read_text(encoding="utf-8", errors="replace").splitlines()
         console.print("\n".join(text[-lines:]) or "(empty)")
+
+
+@meshtastic_app.command("import-md")
+def meshtastic_import_md(
+    path: Path = typer.Argument(..., exists=True, help="Markdown file or folder to import"),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="scan subfolders"),
+    user_id: str = typer.Option(None, "--user-id", help="Mem0 user id"),
+    chunk_chars: int = typer.Option(3500, "--chunk-chars", help="maximum characters per memory record"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="show import plan without writing"),
+    delay: float = typer.Option(0.25, "--delay", help="seconds to wait between writes"),
+):
+    """Import markdown files into the separate Meshtastic Mem0 collection."""
+    user_id = user_id or os.environ.get("MESHTASTIC_MEMORY_USER_ID") or _load_env_file().get(
+        "MESHTASTIC_MEMORY_USER_ID", "hermes:meshtastic")
+    files = _iter_markdown_files(path, recursive=recursive)
+    if not files:
+        console.print("[yellow]no markdown files found.[/]")
+        return
+    if chunk_chars < 500:
+        console.print("[red]--chunk-chars must be at least 500.[/]")
+        raise typer.Exit(1)
+    if not dry_run and not meshtastic_mem0_health():
+        console.print("[yellow]Meshtastic memory is not up; starting it now.[/]")
+        if not meshtastic_start():
+            console.print(f"[red]did not come up - check {MESHTASTIC_MEM0_LOG} and {MESHTASTIC_MCP_LOG}[/]")
+            raise typer.Exit(1)
+
+    plan: list[tuple[Path, int, str]] = []
+    for file in files:
+        text = file.read_text(encoding="utf-8-sig", errors="replace").strip()
+        if not text:
+            continue
+        rel = file.relative_to(path if path.is_dir() else file.parent) if path.is_dir() else file.name
+        for idx, chunk in enumerate(_chunk_markdown(text, chunk_chars), start=1):
+            record = (
+                f"Meshtastic reference import\n"
+                f"Source file: {rel}\n"
+                f"Chunk: {idx}\n\n"
+                f"{chunk}"
+            )
+            plan.append((file, idx, record))
+
+    console.print(f"files: {len(files)}")
+    console.print(f"records: {len(plan)}")
+    console.print(f"user_id: {user_id}")
+    if dry_run:
+        for file, idx, record in plan[:10]:
+            preview = escape(record.replace("\n", " ")[:180])
+            console.print(f"[orange3]{escape(file.name)}[/] chunk {idx}: {preview}")
+        if len(plan) > 10:
+            console.print(f"... {len(plan) - 10} more records")
+        return
+
+    written = 0
+    for file, idx, record in plan:
+        if meshtastic_record(user_id, record):
+            written += 1
+            console.print(f"[green]queued[/] {file.name} chunk {idx}")
+        else:
+            console.print(f"[red]failed[/] {file.name} chunk {idx}")
+        if delay > 0:
+            time.sleep(delay)
+    console.print(f"[green]queued {written}/{len(plan)} records for Mem0 extraction.[/]")
 
 
 @code_app.command("status")
