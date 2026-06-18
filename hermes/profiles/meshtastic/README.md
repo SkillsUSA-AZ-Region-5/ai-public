@@ -21,6 +21,10 @@ stack meshtastic import-md C:\path\to\markdown --dry-run
 stack meshtastic import-md C:\path\to\markdown
 ```
 
+By default, markdown is indexed directly as source reference chunks. Use
+`--via-mem0` only when the content should go through the Mem0 extraction model
+as ordinary long-term memory.
+
 The service reads these values from `.env`:
 
 ```dotenv

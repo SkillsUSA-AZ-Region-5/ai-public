@@ -111,7 +111,8 @@ stack meshtastic import-md <folder>
 
 This is separate from the main Mem0 service. It uses `:8078` for the Mem0 API,
 `:8079/mcp` for Hermes, Qdrant collection `mem0_meshtastic`, and profile notes in
-`hermes/profiles/meshtastic`.
+`hermes/profiles/meshtastic`. Markdown imports are indexed directly as reference
+chunks so Hermes can search source material without the Mem0 brain rewriting it.
 
 ## Web dashboard (host :8090)
 

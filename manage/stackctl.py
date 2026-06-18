@@ -10,6 +10,7 @@ Runs on Windows; shells out to `lms`, `nvidia-smi`, and `wsl ... docker`.
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import os
 import platform
@@ -21,6 +22,7 @@ import sys
 import time
 import urllib.request
 import ctypes
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -61,6 +63,7 @@ MESHTASTIC_MEM0_SCRIPT = ROOT / "memori" / "meshtastic_mem0_service.py"
 MESHTASTIC_MEMORY_MCP_SCRIPT = ROOT / "memori" / "meshtastic_memory_mcp.py"
 MESHTASTIC_MEM0_PORT = int(os.environ.get("MESHTASTIC_MEM0_PORT", "8078"))
 MESHTASTIC_MCP_PORT = int(os.environ.get("MESHTASTIC_MCP_PORT", "8079"))
+MESHTASTIC_MEM0_COLLECTION = os.environ.get("MESHTASTIC_MEM0_COLLECTION", "mem0_meshtastic")
 MESHTASTIC_MEM0_URL = f"http://localhost:{MESHTASTIC_MEM0_PORT}"
 MESHTASTIC_MCP_URL = f"http://localhost:{MESHTASTIC_MCP_PORT}/mcp"
 MESHTASTIC_MEM0_LOG = ROOT / "memori" / "data" / "meshtastic_mem0_service.log"
@@ -495,6 +498,42 @@ def meshtastic_record(user_id: str, text: str) -> bool:
     res = _json_request(f"{MESHTASTIC_MEM0_URL}/record", method="POST",
                         body=body, headers=_meshtastic_headers(), timeout=20)
     return bool(res.get("ok"))
+
+
+def litellm_embed(text: str) -> list[float]:
+    res = _json_request("http://localhost:4000/v1/embeddings", method="POST",
+                        body={"model": "embed", "input": text},
+                        headers=_litellm_headers("LITELLM_KEY_MEM0"), timeout=60)
+    data = res.get("data") or []
+    if not data or "embedding" not in data[0]:
+        raise RuntimeError("LiteLLM embedding response did not include an embedding")
+    return data[0]["embedding"]
+
+
+def meshtastic_upsert_reference(user_id: str, source: str, chunk_index: int, text: str) -> bool:
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    digest = hashlib.md5(f"{user_id}\n{source}\n{chunk_index}\n{text}".encode("utf-8")).hexdigest()
+    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"meshtastic:{digest}"))
+    body = {
+        "points": [{
+            "id": point_id,
+            "vector": litellm_embed(text),
+            "payload": {
+                "user_id": user_id,
+                "data": text,
+                "text_lemmatized": text,
+                "hash": digest,
+                "created_at": now,
+                "updated_at": now,
+                "attributed_to": "reference-import",
+                "source_file": source,
+                "chunk": chunk_index,
+            },
+        }],
+    }
+    res = _json_request(f"{QDRANT_URL}/collections/{MESHTASTIC_MEM0_COLLECTION}/points?wait=true",
+                        method="PUT", body=body, timeout=90)
+    return res.get("status") == "ok"
 
 
 def _iter_markdown_files(path: Path, recursive: bool) -> list[Path]:
@@ -1536,9 +1575,10 @@ def meshtastic_import_md(
     path: Path = typer.Argument(..., exists=True, help="Markdown file or folder to import"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="scan subfolders"),
     user_id: str = typer.Option(None, "--user-id", help="Mem0 user id"),
-    chunk_chars: int = typer.Option(3500, "--chunk-chars", help="maximum characters per memory record"),
+    chunk_chars: int = typer.Option(2500, "--chunk-chars", help="maximum characters per memory record"),
     dry_run: bool = typer.Option(False, "--dry-run", help="show import plan without writing"),
     delay: float = typer.Option(0.25, "--delay", help="seconds to wait between writes"),
+    via_mem0: bool = typer.Option(False, "--via-mem0", help="send chunks through Mem0 extraction instead of direct reference embedding"),
 ):
     """Import markdown files into the separate Meshtastic Mem0 collection."""
     user_id = user_id or os.environ.get("MESHTASTIC_MEMORY_USER_ID") or _load_env_file().get(
@@ -1550,13 +1590,13 @@ def meshtastic_import_md(
     if chunk_chars < 500:
         console.print("[red]--chunk-chars must be at least 500.[/]")
         raise typer.Exit(1)
-    if not dry_run and not meshtastic_mem0_health():
+    if not dry_run and via_mem0 and not meshtastic_mem0_health():
         console.print("[yellow]Meshtastic memory is not up; starting it now.[/]")
         if not meshtastic_start():
             console.print(f"[red]did not come up - check {MESHTASTIC_MEM0_LOG} and {MESHTASTIC_MCP_LOG}[/]")
             raise typer.Exit(1)
 
-    plan: list[tuple[Path, int, str]] = []
+    plan: list[tuple[Path, str, int, str]] = []
     for file in files:
         text = file.read_text(encoding="utf-8-sig", errors="replace").strip()
         if not text:
@@ -1569,13 +1609,14 @@ def meshtastic_import_md(
                 f"Chunk: {idx}\n\n"
                 f"{chunk}"
             )
-            plan.append((file, idx, record))
+            plan.append((file, str(rel), idx, record))
 
     console.print(f"files: {len(files)}")
     console.print(f"records: {len(plan)}")
     console.print(f"user_id: {user_id}")
+    console.print(f"mode: {'mem0 extraction' if via_mem0 else 'direct reference embeddings'}")
     if dry_run:
-        for file, idx, record in plan[:10]:
+        for file, _rel, idx, record in plan[:10]:
             preview = escape(record.replace("\n", " ")[:180])
             console.print(f"[orange3]{escape(file.name)}[/] chunk {idx}: {preview}")
         if len(plan) > 10:
@@ -1583,15 +1624,17 @@ def meshtastic_import_md(
         return
 
     written = 0
-    for file, idx, record in plan:
-        if meshtastic_record(user_id, record):
+    for file, rel, idx, record in plan:
+        ok = meshtastic_record(user_id, record) if via_mem0 else meshtastic_upsert_reference(user_id, rel, idx, record)
+        if ok:
             written += 1
-            console.print(f"[green]queued[/] {file.name} chunk {idx}")
+            console.print(f"[green]{'queued' if via_mem0 else 'indexed'}[/] {file.name} chunk {idx}")
         else:
             console.print(f"[red]failed[/] {file.name} chunk {idx}")
         if delay > 0:
             time.sleep(delay)
-    console.print(f"[green]queued {written}/{len(plan)} records for Mem0 extraction.[/]")
+    action = "queued for Mem0 extraction" if via_mem0 else "indexed as reference memory"
+    console.print(f"[green]{written}/{len(plan)} records {action}.[/]")
 
 
 @code_app.command("status")
